@@ -8,6 +8,21 @@
 - Microsoft Teams Webhook
 - JavaScript (ES6+)
 
+## 시현 영상
+
+<details>
+<summary>노션, 팀즈, OpenAI, CursorAI 연동</summary>
+
+- 노션에서 개발문서를 작성하면
+- 팀즈에서 문서추가 알림이 오고
+- 팀즈에서 웹훅을 실행하면
+- 서버에 POST 요청으로 트리거가되서
+- OpenAI와 CursorAI를 활용하여 기능명세 json 파일 & 기능 초안을 poc 폴더에 현재날짜로 추가합니다
+
+![연동_테스트_영상](/uploads/913f1b64b992a0e699cd30feb8b05d7a/연동_테스트_영상.mp4)
+
+</details>
+
 ## 🚀 실행 방법
 
 1. **환경 변수 설정**
