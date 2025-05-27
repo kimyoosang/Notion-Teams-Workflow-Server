@@ -27,35 +27,38 @@ const createTeamsMessage = ({ id, title }) => ({
             type: 'TextBlock',
             text: `새로운 문서가 업데이트되었습니다: ${title}`,
           },
-          {
-            type: 'ActionSet',
-            actions: [
-              {
-                type: 'Action.Submit',
-                title: '수락',
-                data: {
-                  action: 'approve',
-                  pageId: id,
-                },
-              },
-            ],
-          },
         ],
       },
     },
   ],
 });
 
-const sendNotification = async ({ id, title, url }) => {
-  const message = createTeamsMessage({ id, title });
+// 일반 알림용
+const sendNotification = async ({ id, title, url, text }) => {
+  const message = createTeamsMessage({ id, title: text ? `${title}\n${text}` : title });
   await teamsConfig.axiosInstance.post('', message);
 };
 
-const verifyWebhookSignature = req => {
-  const bufSecret = Buffer.from(teamsConfig.webhookSecret, 'base64');
+// 질문 답변용
+const sendQuestionAnswer = async ({ text, teamsConversationId }) => {
+  // 질문/답변만 전송
+  const message = {
+    text,
+  };
+  await teamsConfig.questionAxiosInstance.post('', message);
+};
+
+// 시그니처 검증 (타입별)
+const verifyWebhookSignature = (req, type = 'default') => {
+  let secret;
+  if (type === 'question') {
+    secret = Buffer.from(teamsConfig.questionWebhookSecret, 'base64');
+  } else {
+    secret = Buffer.from(teamsConfig.webhookSecret, 'base64');
+  }
   const auth = req.headers['authorization'];
   const msgHash =
-    'HMAC ' + crypto.createHmac('sha256', bufSecret).update(req.rawBody).digest('base64');
+    'HMAC ' + crypto.createHmac('sha256', secret).update(req.rawBody).digest('base64');
   return msgHash === auth;
 };
 
@@ -98,7 +101,7 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
     messages: [
       {
         role: 'system',
-        content: `Implement fully functional JavaScript code that satisfies all requirements and flows described in the following software specification.\n- Do NOT write any HTML or CSS, only JavaScript code (functionality implementation).\n- The code should be a single JS file and must run without errors.\n- Assume that any required DOM elements are either created in JavaScript or already exist.\n- The code must not contain syntax errors.\n- Do NOT include unnecessary comments, explanations, examples, HTML, or CSS.\n\nRespond with BOTH a JSON code block and a JavaScript code block, in this order.\nThe JSON code block MUST contain the full feature specification as a JSON object, not an empty object.\nDo NOT omit either block, even if you think one is redundant.\n\nRespond in the following format:\n\n\"\"\"json\n{...}\n\"\"\"\n\n\"\"\"javascript\n// complete code\n\"\"\"\n`,
+        content: `Implement fully functional JavaScript code that satisfies all requirements and flows described in the following software specification.\n- Do NOT write any HTML or CSS, only JavaScript code (functionality implementation).\n- The code should be a single JS file and must run without errors.\n- Assume that any required DOM elements are either created in JavaScript or already exist.\n- The code must not contain syntax errors.\n- Do NOT include unnecessary comments, explanations, examples, HTML, or CSS.\n- There must be no unimplemented parts, no TODOs, and no comments like /* ... */. All logic must be fully implemented and runnable.\n\nRespond with BOTH a JSON code block and a JavaScript code block, in this order.\nThe JSON code block MUST contain the full feature specification as a JSON object, not an empty object.\nDo NOT omit either block, even if you think one is redundant.\n\nRespond in the following format:\n\n\"\"\"json\n{...}\n\"\"\"\n\n\"\"\"javascript\n// complete code\n\"\"\"\n`,
       },
       {
         role: 'user',
@@ -137,7 +140,7 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
   const jsPath = path.join(folderPath, `${fileBase}.js`);
   await fs.writeFile(jsPath, code);
 
-  // 5. Teams 알림 전송
+  // 5. Teams 알림 전송 (코드 생성/알림용 Webhook만)
   await sendNotification({
     id: pageId,
     title,
@@ -149,6 +152,7 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
 
 module.exports = {
   sendNotification,
+  sendQuestionAnswer,
   verifyWebhookSignature,
   isDuplicateMessage,
   extractPageIdFromText,
