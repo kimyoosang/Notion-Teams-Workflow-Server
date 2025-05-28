@@ -1,21 +1,23 @@
-const teamsConfig = require('../config/teams.config');
-const crypto = require('crypto');
-const fs = require('fs').promises;
-const path = require('path');
-const notionService = require('./notion.service');
-const openaiConfig = require('../config/openai.config');
+import { Request } from 'express';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import teamsConfig from '../config/teams.config';
+import notionService from './notion.service';
+import openaiConfig from '../config/openai.config';
+import { getNextFolderAndFileName } from '../utils/dateFolder.util';
 
 const openai = openaiConfig.client;
 
 // 중복 메시지 방지용 Set (10분 유지)
-const processedMessageIds = new Set();
+const processedMessageIds = new Set<string>();
 
-const addProcessedMessageId = messageId => {
+const addProcessedMessageId = (messageId: string) => {
   processedMessageIds.add(messageId);
   setTimeout(() => processedMessageIds.delete(messageId), 10 * 60 * 1000); // 10분 후 삭제
 };
 
-const createTeamsMessage = ({ id, title }) => ({
+const createTeamsMessage = ({ title }: { id: string; title: string }) => ({
   type: 'message',
   attachments: [
     {
@@ -34,13 +36,22 @@ const createTeamsMessage = ({ id, title }) => ({
 });
 
 // 일반 알림용
-const sendNotification = async ({ id, title, url, text }) => {
+const sendNotification = async ({
+  id,
+  title,
+  text,
+}: {
+  id: string;
+  title: string;
+  url: string;
+  text?: string;
+}) => {
   const message = createTeamsMessage({ id, title: text ? `${title}\n${text}` : title });
   await teamsConfig.axiosInstance.post('', message);
 };
 
 // 질문 답변용
-const sendQuestionAnswer = async ({ text, teamsConversationId }) => {
+const sendQuestionAnswer = async ({ text }: { text: string; teamsConversationId: string }) => {
   // 질문/답변만 전송
   const message = {
     text,
@@ -49,20 +60,32 @@ const sendQuestionAnswer = async ({ text, teamsConversationId }) => {
 };
 
 // 시그니처 검증 (타입별)
-const verifyWebhookSignature = (req, type = 'default') => {
-  let secret;
+const verifyWebhookSignature = (
+  req: Request & { rawBody?: Buffer },
+  type: 'default' | 'question' = 'default'
+): boolean => {
+  let secret: Buffer;
   if (type === 'question') {
+    if (!teamsConfig.questionWebhookSecret) {
+      throw new Error('TEAMS_QUESTION_WEBHOOK_SECRET is not set');
+    }
     secret = Buffer.from(teamsConfig.questionWebhookSecret, 'base64');
   } else {
+    if (!teamsConfig.webhookSecret) {
+      throw new Error('TEAMS_WEBHOOK_SECRET is not set');
+    }
     secret = Buffer.from(teamsConfig.webhookSecret, 'base64');
   }
   const auth = req.headers['authorization'];
+  if (!auth || !req.rawBody) {
+    return false;
+  }
   const msgHash =
     'HMAC ' + crypto.createHmac('sha256', secret).update(req.rawBody).digest('base64');
   return msgHash === auth;
 };
 
-const isDuplicateMessage = messageId => {
+const isDuplicateMessage = (messageId: string): boolean => {
   if (processedMessageIds.has(messageId)) {
     return true;
   }
@@ -70,7 +93,7 @@ const isDuplicateMessage = messageId => {
   return false;
 };
 
-const extractPageIdFromText = text => {
+const extractPageIdFromText = (text: string): string | null => {
   console.log('Teams Webhook text 원본:', text);
   let plain = text || '';
   plain = plain.replace(/<[^>]+>/g, ' ');
@@ -86,7 +109,13 @@ const extractPageIdFromText = text => {
 };
 
 // 핵심 비즈니스 로직: Notion → OpenAI → 파일저장 → Teams 알림
-const processTeamsWebhook = async ({ id: messageId, text }) => {
+const processTeamsWebhook = async ({
+  id: messageId,
+  text,
+}: {
+  id: string;
+  text: string;
+}): Promise<void> => {
   // 1. Notion 페이지 ID 추출
   const pageId = extractPageIdFromText(text);
   if (!pageId) throw new Error('PageID를 찾을 수 없습니다.');
@@ -101,7 +130,7 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
     messages: [
       {
         role: 'system',
-        content: `Implement fully functional JavaScript code that satisfies all requirements and flows described in the following software specification.\n- Do NOT write any HTML or CSS, only JavaScript code (functionality implementation).\n- The code should be a single JS file and must run without errors.\n- Assume that any required DOM elements are either created in JavaScript or already exist.\n- The code must not contain syntax errors.\n- Do NOT include unnecessary comments, explanations, examples, HTML, or CSS.\n- There must be no unimplemented parts, no TODOs, and no comments like /* ... */. All logic must be fully implemented and runnable.\n\nRespond with BOTH a JSON code block and a JavaScript code block, in this order.\nThe JSON code block MUST contain the full feature specification as a JSON object, not an empty object.\nDo NOT omit either block, even if you think one is redundant.\n\nRespond in the following format:\n\n\"\"\"json\n{...}\n\"\"\"\n\n\"\"\"javascript\n// complete code\n\"\"\"\n`,
+        content: `Implement fully functional TypeScript code that satisfies all requirements and flows described in the following software specification.\n- Do NOT write any HTML or CSS, only TypeScript code (functionality implementation).\n- The code should be a single TS file and must run without errors.\n- All methods and logic must be fully implemented and runnable.\n- Do NOT include any TODOs, comments like 'Implement ...', or unimplemented parts.\n- Do NOT leave any method or function body empty.\n- Do NOT include unnecessary comments, explanations, or examples.\n- Do NOT use class syntax. Write the code in functional (function-based) TypeScript only.\n- The code must not produce any TypeScript compile errors or warnings (no TS errors, no unused variables, etc).\n- The code must pass tsc (TypeScript compiler) with strict mode enabled.\n- Assume that any required DOM elements are either created in TypeScript or already exist.\n- Respond with BOTH a JSON code block and a TypeScript code block, in this order.\n- The JSON code block MUST contain the full feature specification as a JSON object, not an empty object.\n- Do NOT omit either block, even if you think one is redundant.\n\nRespond in the following format:\n\n\"\"\"json\n{...}\n\"\"\"\n\n\"\"\"typescript\n// complete code\n\"\"\"\n`,
       },
       {
         role: 'user',
@@ -112,12 +141,15 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
     temperature: openaiConfig.temperature,
   });
 
-  const response = completion.choices[0].message.content;
+  const response = completion.choices[0]?.message?.content;
+  if (!response) {
+    throw new Error('OpenAI 응답이 비어있습니다.');
+  }
   console.log('OpenAI 응답:', response);
   const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/i);
   const codeMatch =
-    response.match(/```javascript\s*([\s\S]*?)\s*```/i) ||
-    response.match(/```js\s*([\s\S]*?)\s*```/i) ||
+    response.match(/```typescript\s*([\s\S]*?)\s*```/i) ||
+    response.match(/```ts\s*([\s\S]*?)\s*```/i) ||
     response.match(/```\s*([\s\S]*?)\s*```/i);
 
   if (!codeMatch) {
@@ -131,14 +163,13 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
   const code = codeMatch[1];
 
   // 4. 파일 저장
-  const pocBaseDir = path.join(__dirname, '../poc');
-  const { folderName, folderPath, fileBase } =
-    await require('../utils/dateFolder.util').getNextFolderAndFileName(pocBaseDir);
+  const pocBaseDir = path.join(process.cwd(), 'src/poc');
+  const { folderPath, fileBase } = await getNextFolderAndFileName(pocBaseDir);
   await fs.mkdir(folderPath, { recursive: true });
   const jsonPath = path.join(folderPath, `${fileBase}.json`);
   await fs.writeFile(jsonPath, JSON.stringify(json, null, 2));
-  const jsPath = path.join(folderPath, `${fileBase}.js`);
-  await fs.writeFile(jsPath, code);
+  const tsPath = path.join(folderPath, `${fileBase}.ts`);
+  await fs.writeFile(tsPath, code);
 
   // 5. Teams 알림 전송 (코드 생성/알림용 Webhook만)
   await sendNotification({
@@ -150,7 +181,7 @@ const processTeamsWebhook = async ({ id: messageId, text }) => {
   console.log('Teams webhook 처리 완료:', { messageId, pageId });
 };
 
-module.exports = {
+export default {
   sendNotification,
   sendQuestionAnswer,
   verifyWebhookSignature,

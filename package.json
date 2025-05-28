@@ -1,11 +1,13 @@
 {
   "name": "notion-teams-integration",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "license": "MIT",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "start": "yarn build && node dist/index.js",
+    "dev": "nodemon",
+    "build": "tsc",
+    "watch": "tsc -w"
   },
   "dependencies": {
     "@notionhq/client": "^3.1.1",
@@ -15,5 +17,13 @@
     "express": "^5.1.0",
     "nodemon": "^3.1.10",
     "openai": "^4.103.0"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.5",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.23",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }

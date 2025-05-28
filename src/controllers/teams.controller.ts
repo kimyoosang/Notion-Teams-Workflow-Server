@@ -1,6 +1,7 @@
-const teamsService = require('../services/teams.service');
+import { Request, Response } from 'express';
+import teamsService from '../services/teams.service';
 
-const handleWebhook = async (req, res) => {
+const handleWebhook = async (req: Request, res: Response): Promise<void> => {
   // 1. 먼저 빠른 응답을 보냄
   res.status(200).json({
     type: 'message',
@@ -33,6 +34,6 @@ const handleWebhook = async (req, res) => {
   }
 };
 
-module.exports = {
+export default {
   handleWebhook,
 };

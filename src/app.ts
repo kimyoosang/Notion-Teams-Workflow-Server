@@ -1,15 +1,17 @@
-require('dotenv').config();
-const express = require('express');
-const notionRoutes = require('./routes/notion.routes');
-const teamsRoutes = require('./routes/teams.routes');
+import dotenv from 'dotenv';
+import express, { Request, Response, NextFunction } from 'express';
+import notionRoutes from './routes/notion.routes';
+import teamsRoutes from './routes/teams.routes';
+
+dotenv.config();
 
 const app = express();
 
 // 미들웨어 설정
 app.use(
   express.json({
-    verify: (req, res, buf) => {
-      req.rawBody = buf;
+    verify: (_req: Request, _res: Response, buf: Buffer) => {
+      (_req as any).rawBody = buf;
     },
   })
 );
@@ -19,7 +21,7 @@ app.use('/api/notion', notionRoutes);
 app.use('/api/teams', teamsRoutes);
 
 // 에러 핸들링 미들웨어
-app.use((err, req, res, next) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('에러 발생:', err);
   res.status(500).json({
     error: '서버 에러가 발생했습니다.',
@@ -27,4 +29,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-module.exports = app;
+export default app;

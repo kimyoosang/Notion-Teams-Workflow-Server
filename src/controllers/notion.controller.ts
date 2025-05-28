@@ -1,6 +1,7 @@
-const notionService = require('../services/notion.service');
+import { RequestHandler } from 'express';
+import notionService from '../services/notion.service';
 
-const answerQuestion = async (req, res) => {
+const answerQuestion: RequestHandler = async (req, res) => {
   try {
     // HTML 태그 제거 및 멘션/공백 정리
     let question = req.body.text || '';
@@ -12,7 +13,8 @@ const answerQuestion = async (req, res) => {
       .trim();
 
     if (!question) {
-      return res.status(400).json({ error: '질문이 필요합니다.' });
+      res.status(400).json({ error: '질문이 필요합니다.' });
+      return;
     }
     // answerQuestionToTeams가 답변만 반환
     const answer = await notionService.answerQuestionToTeams(question);
@@ -26,6 +28,6 @@ const answerQuestion = async (req, res) => {
   }
 };
 
-module.exports = {
+export default {
   answerQuestion,
 };

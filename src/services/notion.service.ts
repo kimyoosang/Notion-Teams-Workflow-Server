@@ -1,7 +1,7 @@
-const notionClient = require('../config/notion.config');
-const openaiConfig = require('../config/openai.config');
+import notionClient from '../config/notion.config';
+import openaiConfig from '../config/openai.config';
 
-const extractTextFromBlock = block => {
+const extractTextFromBlock = (block: any): string => {
   if (
     block.type === 'paragraph' ||
     block.type === 'heading_1' ||
@@ -13,18 +13,18 @@ const extractTextFromBlock = block => {
     block.type === 'toggle' ||
     block.type === 'code'
   ) {
-    return block[block.type].rich_text.map(t => t.plain_text).join('') + '\n';
+    return block[block.type].rich_text.map((t: any) => t.plain_text).join('') + '\n';
   }
   return '';
 };
 
-const getPageContent = async pageId => {
-  const page = await notionClient.pages.retrieve({ page_id: pageId });
+const getPageContent = async (pageId: string): Promise<{ title: string; bodyText: string }> => {
+  const page = (await notionClient.pages.retrieve({ page_id: pageId })) as any;
   let title = page.properties.title?.title?.[0]?.plain_text || '제목 없음';
 
   // 모든 블록(자식 포함) 재귀적으로 파싱
-  const getAllBlocks = async blockId => {
-    let blocks = [];
+  const getAllBlocks = async (blockId: string) => {
+    let blocks: any[] = [];
     let cursor = undefined;
     do {
       const res = await notionClient.blocks.children.list({
@@ -37,7 +37,7 @@ const getPageContent = async pageId => {
     return blocks;
   };
 
-  const parseBlocks = async blocks => {
+  const parseBlocks = async (blocks: any[]) => {
     let text = '';
     for (const block of blocks) {
       text += extractTextFromBlock(block);
@@ -55,7 +55,7 @@ const getPageContent = async pageId => {
   return { title, bodyText };
 };
 
-const answerQuestionToTeams = async question => {
+const answerQuestionToTeams = async (question: string): Promise<string> => {
   const pageId = '2005a2faa7548022a17cfcb4b09e8b55'; // 고정
   const { title, bodyText } = await getPageContent(pageId);
   const openai = openaiConfig.client;
@@ -69,11 +69,11 @@ const answerQuestionToTeams = async question => {
     max_tokens: 500,
     temperature: 0.2,
   });
-  const answer = completion.choices[0].message.content.trim();
+  const answer = completion.choices[0]?.message?.content?.trim() || '';
   return answer;
 };
 
-module.exports = {
+export default {
   getPageContent,
   answerQuestionToTeams,
 };
